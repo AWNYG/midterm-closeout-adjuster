@@ -55,4 +55,4 @@ python -m pytest tests/ -v
 - 校验严格化：输入字段必须为有限数值（拒绝 NaN/Inf/字符串/None），盘口档位量为 0 合法，`contract` 列表须按时段 0~23 升序排列。
 - 持仓限额仅约束买入（买后持仓不得超过限额）；**卖出减仓不受持仓限额约束**，超限持仓允许卖出。
 - 结算/考核参数（`deviation_band_low/high`、`recover_factor`）、`shrink_bands`、`initial_order_policy` 均从 params.yaml 读取并传入决策链。
-- 成交量向下取整到 10 MWh；期望量不足一包即 hold；未成交放弃该时段，不追价。
+- 成交量向下取整到 0.1 MWh（100 kWh，样例最小交易单位）；期望量不足一包即 hold；未成交放弃该时段，不追价。

@@ -580,7 +580,7 @@ class TestRunRobust:
     def test_run_tiny_limit_all_hold_or_sell(self, tmp_path):
         # 极限小限额：买不起，卖可以
         d = base_data()
-        d["position_limit_mwh"] = 1.0
+        d["position_limit_mwh"] = 0.05    # 样例持仓最低 0.23，均超限 → 只能卖
         result = run(cfg, d, out_dir=tmp_path)
         assert result["summary"]["buy_total_mwh"] == 0
 

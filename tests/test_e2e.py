@@ -100,7 +100,7 @@ def test_over_limit_position_can_sell(tmp_path):
     """超限持仓允许卖出减仓（不被持仓限额否决）。"""
     config = load_config(DEFAULT_CONFIG)
     data = _sample_data()
-    data["position_limit_mwh"] = 100.0    # 低于全部时段持仓 → 只能卖不能买
+    data["position_limit_mwh"] = min(c["volume_mwh"] for c in data["contract"]) / 2  # 低于全部时段持仓 → 只能卖不能买
     result = run(config, data, out_dir=tmp_path)
     s = result["summary"]
     assert s["buy_total_mwh"] == 0

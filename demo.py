@@ -29,7 +29,7 @@ def print_decision_table(result, data):
     print(SEP)
     print(f"交割日 {result['delivery_date']}   输入快照 {result['as_of']}   "
           f"置信度 {result['summary']['confidence']}")
-    print(f"持仓限额 {data['position_limit_mwh']:.0f} MWh   最小交易单位 {data['min_lot_mwh']:.0f} MWh")
+    print(f"持仓限额 {data['position_limit_mwh']:.2f} MWh   最小交易单位 {data['min_lot_mwh']:.2f} MWh")
     print(LINE)
     hdr = (f"{'时段':>3} {'动作':<5} {'合同Q':>8} {'负荷L':>8} {'现货S':>8} {'均价P':>8} "
            f"{'MV_t0':>8} {'买1':>8} {'卖1':>8} {'报价区间':>14} {'量MWh':>7} {'挂单价':>8} "
@@ -52,14 +52,14 @@ def print_decision_table(result, data):
             vol = d["volume_mwh"]
             px = d["orders"][0]["price"]
             pnl = d["expected_pnl_cny"]
-        print(f"{t:>3} {d['action']:<5} {c['volume_mwh']:>8.0f} {data['load_forecast_mwh'][t]:>8.0f} "
+        print(f"{t:>3} {d['action']:<5} {c['volume_mwh']:>8.2f} {data['load_forecast_mwh'][t]:>8.2f} "
               f"{data['spot_forecast_yuan_mwh'][t]:>8.1f} {c['avg_price_yuan_mwh']:>8.1f} "
               f"{d['mv']:>8.2f} {b['bid'][0]['px']:>8.1f} {b['ask'][0]['px']:>8.1f} "
-              f"{rng:>14} {vol:>7.0f} {px:>8.2f} {pnl:>10.2f}  {','.join(d['reasons'])}")
+              f"{rng:>14} {vol:>7.2f} {px:>8.2f} {pnl:>10.2f}  {','.join(d['reasons'])}")
 
     s = result["summary"]
     print(LINE)
-    print(f"汇总: 买入 {s['buy_total_mwh']:.0f} MWh | 卖出 {s['sell_total_mwh']:.0f} MWh | "
+    print(f"汇总: 买入 {s['buy_total_mwh']:.2f} MWh | 卖出 {s['sell_total_mwh']:.2f} MWh | "
           f"不动 {s['hold_count']} 时段 | 期望总收益 ≈ "
           f"{sum(x['expected_pnl_cny'] for x in result['decisions']):.2f} 元")
 
@@ -82,11 +82,11 @@ def print_book_detail(result, data, top_n=None):
         t = d["period"]
         b = data["books"][t]
         print(f"\n时段 {t}  {d['action']:<4}  价差 {spread:.2f}   MV_t0={d['mv']:.2f}")
-        print("  bid 档:  " + " | ".join(f"{lvl['px']:.1f}×{lvl['vol']:.0f}" for lvl in b["bid"]))
-        print("  ask 档:  " + " | ".join(f"{lvl['px']:.1f}×{lvl['vol']:.0f}" for lvl in b["ask"]))
+        print("  bid 档:  " + " | ".join(f"{lvl['px']:.1f}×{lvl['vol']:.2f}" for lvl in b["bid"]))
+        print("  ask 档:  " + " | ".join(f"{lvl['px']:.1f}×{lvl['vol']:.2f}" for lvl in b["ask"]))
         lo, hi = d["price_range"]
         print(f"  报价区间 [{lo:.2f}, {hi:.2f}]   初始挂单 {d['orders'][0]['price']:.2f} × "
-              f"{d['volume_mwh']:.0f} MWh   期望收益 {d['expected_pnl_cny']:.2f} 元")
+              f"{d['volume_mwh']:.2f} MWh   期望收益 {d['expected_pnl_cny']:.2f} 元")
 
 
 def main(argv=None):

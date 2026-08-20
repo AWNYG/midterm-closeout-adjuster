@@ -153,7 +153,7 @@ def print_summary(result: dict) -> None:
         else:
             lo, hi = d["price_range"]
             px = d["orders"][0]["price"]
-            print(f"  t{d['period']:>2}  {d['action']:<4} [{lo:>8.2f}, {hi:>8.2f}] 挂单 {px:>8.2f} x {d['volume_mwh']:>6.0f}  "
+            print(f"  t{d['period']:>2}  {d['action']:<4} [{lo:>8.2f}, {hi:>8.2f}] 挂单 {px:>8.2f} x {d['volume_mwh']:>7.2f}  "
                   f"mv={d['mv']:>8.2f} pnl={d['expected_pnl_cny']:>10.2f}  {','.join(d['reasons'])}")
 
 
