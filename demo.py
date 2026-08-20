@@ -19,7 +19,7 @@ except AttributeError:
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.main import DEFAULT_CONFIG, DEFAULT_OUTPUT_DIR, load_config, run
+from src.main import DEFAULT_CONFIG, DEFAULT_OUTPUT_DIR, load_config, run, save_result
 
 SEP = "=" * 78
 LINE = "-" * 78
@@ -102,7 +102,8 @@ def main(argv=None):
     with open(in_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    result = run(config, data, out_dir=DEFAULT_OUTPUT_DIR)
+    result = run(config, data)
+    save_result(result, DEFAULT_OUTPUT_DIR)
 
     print(SEP)
     print(f"滚动撮合收盘微调 · 演示运行  输入: {in_path.name}")

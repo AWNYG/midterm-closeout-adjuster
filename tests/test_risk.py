@@ -67,3 +67,13 @@ class TestFloorLot:
         assert floor_lot(10, MIN_LOT) == 10
         assert floor_lot(59, MIN_LOT) == 50
         assert floor_lot(0.5, MIN_LOT) == 0
+
+    def test_no_float_artifacts(self):
+        # 浮点尾数必须被清除：0.9000000000000001 → 0.9
+        assert floor_lot(0.9000000000000001, 0.001) == 0.9
+        assert floor_lot(0.30000000000000004, 0.1) == 0.3
+        assert floor_lot(0.304, 0.001) == 0.304
+
+    def test_fractional_lot_clean(self):
+        assert floor_lot(3.3, 0.5) == 3.0
+        assert floor_lot(7.500000000000001, 2.5) == 7.5

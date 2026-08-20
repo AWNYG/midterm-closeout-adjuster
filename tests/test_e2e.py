@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from src.main import DEFAULT_CONFIG, run, load_config
+from src.main import DEFAULT_CONFIG, run, load_config, save_result
 
 ROOT = Path(__file__).resolve().parent.parent
 SAMPLE = ROOT / "data" / "sample" / "2026-08-22.json"
@@ -13,7 +13,8 @@ def test_e2e_sample(tmp_path):
     config = load_config(DEFAULT_CONFIG)
     with open(SAMPLE, "r", encoding="utf-8") as f:
         data = json.load(f)
-    result = run(config, data, out_dir=tmp_path)
+    result = run(config, data)
+    save_result(result, out_dir=tmp_path)
 
     assert len(result["decisions"]) == 24
     for d in result["decisions"]:
@@ -64,7 +65,7 @@ def test_config_params_thread_through(tmp_path, monkeypatch):
 
     monkeypatch.setattr(m, "decide_period", spy)
     config = load_config(DEFAULT_CONFIG)
-    run(config, _sample_data(), out_dir=tmp_path)
+    run(config, _sample_data())
 
     assert captured["band_low"] == config["deviation_band_low"]
     assert captured["band_high"] == config["deviation_band_high"]
@@ -77,7 +78,7 @@ def test_config_params_thread_through(tmp_path, monkeypatch):
     cfg["deviation_band_high"] = 1.1
     cfg["recover_factor"] = 1.5
     cfg["shrink_bands"] = 0.3
-    run(cfg, _sample_data(), out_dir=tmp_path / "alt")
+    run(cfg, _sample_data())
     assert captured["band_low"] == 0.9
     assert captured["band_high"] == 1.1
     assert captured["recover"] == 1.5
@@ -85,7 +86,7 @@ def test_config_params_thread_through(tmp_path, monkeypatch):
 
     cfg2 = dict(cfg)
     cfg2["confidence_shrink"] = False
-    run(cfg2, _sample_data(), out_dir=tmp_path / "noshrink")
+    run(cfg2, _sample_data())
     assert captured["shrink"] == 0.0
 
 
@@ -101,7 +102,7 @@ def test_over_limit_position_can_sell(tmp_path):
     config = load_config(DEFAULT_CONFIG)
     data = _sample_data()
     data["position_limit_mwh"] = min(c["volume_mwh"] for c in data["contract"]) / 2  # 低于全部时段持仓 → 只能卖不能买
-    result = run(config, data, out_dir=tmp_path)
+    result = run(config, data)
     s = result["summary"]
     assert s["buy_total_mwh"] == 0
     assert s["sell_total_mwh"] >= 0

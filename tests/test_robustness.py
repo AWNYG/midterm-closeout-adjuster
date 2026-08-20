@@ -282,7 +282,7 @@ class TestSplitPriceLimits:
         d["spot_forecast_yuan_mwh"][0] = -30.0
         result = run(full_config(price_max_yuan_mwh=481.44,
                                  spot_price_min_yuan_mwh=-50.0,
-                                 spot_price_max_yuan_mwh=800.0), d, out_dir=tmp_path)
+                                 spot_price_max_yuan_mwh=800.0), d)
         assert result["summary"]["confidence"] == 0.8
 
         d2 = base_data()
@@ -290,14 +290,14 @@ class TestSplitPriceLimits:
         with pytest.raises(ValidationError):
             run(full_config(price_max_yuan_mwh=481.44,
                             spot_price_min_yuan_mwh=-50.0,
-                            spot_price_max_yuan_mwh=800.0), d2, out_dir=tmp_path)
+                            spot_price_max_yuan_mwh=800.0), d2)
 
         d3 = base_data()
         d3["books"][0]["ask"][0]["px"] = 600.0
         with pytest.raises(ValidationError):
             run(full_config(price_max_yuan_mwh=481.44,
                             spot_price_min_yuan_mwh=-50.0,
-                            spot_price_max_yuan_mwh=800.0), d3, out_dir=tmp_path)
+                            spot_price_max_yuan_mwh=800.0), d3)
 
 
 class TestCli:
@@ -331,24 +331,24 @@ class TestCli:
 class TestConfigTypeChecks:
     def test_run_string_theta_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(theta_yuan_mwh="2"), base_data(), out_dir=tmp_path)
+            run(full_config(theta_yuan_mwh="2"), base_data())
 
     def test_run_nan_theta_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(theta_yuan_mwh=float("nan")), base_data(), out_dir=tmp_path)
+            run(full_config(theta_yuan_mwh=float("nan")), base_data())
 
     def test_run_string_recover_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(recover_factor="1.1"), base_data(), out_dir=tmp_path)
+            run(full_config(recover_factor="1.1"), base_data())
 
     def test_run_inverted_bands_rejected(self, tmp_path):
         with pytest.raises(ValueError):
             run(full_config(deviation_band_low=1.2, deviation_band_high=0.9),
-                base_data(), out_dir=tmp_path)
+                base_data())
 
     def test_run_negative_max_amount_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(max_amount_yuan_mwh=-1.0), base_data(), out_dir=tmp_path)
+            run(full_config(max_amount_yuan_mwh=-1.0), base_data())
 
     def test_floor_lot_zero_min_lot(self):
         with pytest.raises(ValueError):
@@ -386,7 +386,7 @@ class TestNegativeSpot:
         # 24 时段现货全为 -50（下限边界）→ 运行成功，输出结构完整
         d = base_data()
         d["spot_forecast_yuan_mwh"] = [-50.0] * 24
-        result = run(cfg, d, out_dir=tmp_path)
+        result = run(cfg, d)
         assert len(result["decisions"]) == 24
         for x in result["decisions"]:
             assert x["action"] in ("buy", "sell", "hold")
@@ -405,7 +405,7 @@ class TestNegativeSpot:
                 "bid": [{"px": round(lvl["px"] - lo + 20.0, 1), "vol": lvl["vol"]} for lvl in b["bid"]],
                 "ask": [{"px": round(lvl["px"] - lo + 22.0, 1), "vol": lvl["vol"]} for lvl in b["ask"]],
             }
-        result = run(cfg, d, out_dir=tmp_path)
+        result = run(cfg, d)
         assert len(result["decisions"]) == 24
 
 
@@ -564,48 +564,48 @@ class TestRunRobust:
     def test_run_missing_config_keys(self, tmp_path):
         # 最小配置只给校验参数 → 其余走默认值
         result = run({"price_min_yuan_mwh": 0, "price_max_yuan_mwh": 9999},
-                     base_data(), out_dir=tmp_path)
+                     base_data())
         assert len(result["decisions"]) == 24
 
     def test_run_confidence_out_of_range_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(confidence=1.5), base_data(), out_dir=tmp_path)
+            run(full_config(confidence=1.5), base_data())
         with pytest.raises(ValueError):
-            run(full_config(confidence=-0.1), base_data(), out_dir=tmp_path)
+            run(full_config(confidence=-0.1), base_data())
 
     def test_run_shrink_out_of_range_rejected(self, tmp_path):
         with pytest.raises(ValueError):
-            run(full_config(shrink_bands=1.0), base_data(), out_dir=tmp_path)
+            run(full_config(shrink_bands=1.0), base_data())
 
     def test_run_tiny_limit_all_hold_or_sell(self, tmp_path):
         # 极限小限额：买不起，卖可以
         d = base_data()
         d["position_limit_mwh"] = 0.05    # 样例持仓最低 0.23，均超限 → 只能卖
-        result = run(cfg, d, out_dir=tmp_path)
+        result = run(cfg, d)
         assert result["summary"]["buy_total_mwh"] == 0
 
     def test_run_huge_limit_ok(self, tmp_path):
         d = base_data()
         d["position_limit_mwh"] = 1e12
-        result = run(cfg, d, out_dir=tmp_path)
+        result = run(cfg, d)
         assert result["summary"]["buy_total_mwh"] + result["summary"]["sell_total_mwh"] >= 0
 
     def test_run_zero_theta_ok(self, tmp_path):
-        result = run(full_config(theta_yuan_mwh=0.0), base_data(), out_dir=tmp_path)
+        result = run(full_config(theta_yuan_mwh=0.0), base_data())
         assert len(result["decisions"]) == 24
 
     def test_run_idempotent(self, tmp_path):
         out1 = tmp_path / "a"
         out2 = tmp_path / "b"
-        r1 = run(cfg, base_data(), out_dir=out1)
-        r2 = run(cfg, base_data(), out_dir=out2)
+        r1 = run(cfg, base_data())
+        r2 = run(cfg, base_data())
         # 决策内容一致（decision_time 时间戳可能相同或相差秒级，剔除后比较）
         for k in ("decisions", "summary", "delivery_date", "as_of"):
             assert r1[k] == r2[k]
 
     def test_run_empty_config(self, tmp_path):
         # 空配置：全部默认值，跑通不崩
-        result = run({}, base_data(), out_dir=tmp_path)
+        result = run({}, base_data())
         assert result["summary"]["confidence"] == 1.0
 
 
@@ -699,6 +699,6 @@ class TestFuzz:
                 d["spot_forecast_yuan_mwh"][t] = rng.uniform(-50, 800)
             d["position_limit_mwh"] = rng.uniform(1, 1e6)
             try:
-                run(cfg, d, out_dir=tmp_path / f"s{seed}")
+                run(cfg, d)
             except ValueError as e:
                 raise AssertionError(f"seed={seed}: 合法输入被拒: {e}")

@@ -36,8 +36,8 @@ def _cfg_number(value, name: str, *, lo: float | None = None, hi: float | None =
     return value
 
 
-def run(config: dict, data: dict, out_dir: str | Path = DEFAULT_OUTPUT_DIR) -> dict:
-    """执行 24 时段决策，写输出 JSON，返回决策结果 dict。"""
+def run(config: dict, data: dict) -> dict:
+    """执行 24 时段决策，返回结果 dict（纯计算，不写文件；留痕由 save_result 负责）。"""
     price_min = config.get("price_min_yuan_mwh", 0.0)
     price_max = config.get("price_max_yuan_mwh", 9999.0)
     spot_price_min = config.get("spot_price_min_yuan_mwh", price_min)
@@ -107,7 +107,7 @@ def run(config: dict, data: dict, out_dir: str | Path = DEFAULT_OUTPUT_DIR) -> d
         decisions.append({
             "period": d.period,
             "action": d.action,
-            "price_range": d.price_range,
+            "price_range": [round(x, 2) for x in d.price_range] if d.price_range else None,
             "volume_mwh": d.volume_mwh,
             "orders": d.orders,
             "mv": round(d.mv, 2),
@@ -133,11 +133,16 @@ def run(config: dict, data: dict, out_dir: str | Path = DEFAULT_OUTPUT_DIR) -> d
             "confidence": confidence,
         },
     }
-    out_path = Path(out_dir) / f"{data['delivery_date']}-decision.json"
+    return result
+
+
+def save_result(result: dict, out_dir: str | Path = DEFAULT_OUTPUT_DIR) -> Path:
+    """写结果留痕文件 data/output/<交割日>-decision.json（UTF-8），返回文件路径。"""
+    out_path = Path(out_dir) / f"{result['delivery_date']}-decision.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, indent=2)
-    return result
+    return out_path
 
 
 def print_summary(result: dict) -> None:
@@ -176,7 +181,8 @@ def main(argv: list | None = None) -> int:
                 return 1
             in_path = files[-1]
         data = load_input(in_path)
-        result = run(config, data, args.out)
+        result = run(config, data)
+        save_result(result, args.out)
     except (ValueError, OSError, yaml.YAMLError) as e:
         print(f"执行失败: {e}", file=sys.stderr)
         return 1
