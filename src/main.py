@@ -72,10 +72,10 @@ def run(config: dict, data: dict) -> dict:
         P_avg = c["avg_price_yuan_mwh"]
         L = data["load_forecast_mwh"][t]
         S = data["spot_forecast_yuan_mwh"][t]
-        book = data["books"][t]
+        A = data["avg_trade_price_yuan_mwh"][t]
 
         d = decide_period(
-            book, Q_c, L, S, P_avg,
+            A, Q_c, L, S, P_avg,
             position_limit=position_limit,
             min_lot=min_lot,
             theta=theta,
@@ -148,8 +148,8 @@ def save_result(result: dict, out_dir: str | Path = DEFAULT_OUTPUT_DIR) -> Path:
 def print_summary(result: dict) -> None:
     rows = []
     for d in result["decisions"]:
-        spread = abs(d["mv"] - (d["price_range"][0] if d["action"] == "sell" else (d["price_range"][1] if d["action"] == "buy" else d["mv"])))
-        rows.append((spread, d))
+        px = d["orders"][0]["price"] if d["action"] != "hold" else d["mv"]
+        rows.append((abs(d["mv"] - px), d))
     rows.sort(key=lambda r: r[0], reverse=True)
     print(f"交割日 {result['delivery_date']}  置信度 {result['summary']['confidence']}")
     for spread, d in rows:

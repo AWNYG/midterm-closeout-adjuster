@@ -59,9 +59,9 @@ def test_config_params_thread_through(tmp_path, monkeypatch):
     captured = {}
     orig = m.decide_period
 
-    def spy(book, Q_c, L, S, P_avg, **kw):
+    def spy(avg_trade_price, Q_c, L, S, P_avg, **kw):
         captured.update(kw)
-        return orig(book, Q_c, L, S, P_avg, **kw)
+        return orig(avg_trade_price, Q_c, L, S, P_avg, **kw)
 
     monkeypatch.setattr(m, "decide_period", spy)
     config = load_config(DEFAULT_CONFIG)

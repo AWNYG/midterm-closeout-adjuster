@@ -32,19 +32,12 @@ def full_config(**over) -> dict:
     return c
 
 
-def _period(book_dict, **kw):
+def _period(avg_price, **kw):
     from src.decision import decide_period
     params = dict(Q_c=1000, L=1000, S=300, P_avg=400, position_limit=5000,
                   min_lot=10, theta=2.0)
     params.update(kw)
-    return decide_period(book_dict, **params)
-
-
-def valid_book(bid1=398.0, ask1=402.0, vol=100.0):
-    return {
-        "bid": [{"px": bid1 - i, "vol": vol} for i in range(5)],
-        "ask": [{"px": ask1 + i, "vol": vol} for i in range(5)],
-    }
+    return decide_period(avg_price, **params)
 
 
 # ---------- 输入校验：非法数值类型 / NaN / Inf ----------
@@ -89,27 +82,21 @@ class TestValidateFinite:
         with pytest.raises(ValidationError):
             validate(d)
 
-    def test_str_px_rejected(self):
+    def test_str_avg_rejected(self):
         d = base_data()
-        d["books"][0]["ask"][0]["px"] = "x"
+        d["avg_trade_price_yuan_mwh"][0] = "x"
         with pytest.raises(ValidationError):
             validate(d)
 
-    def test_str_vol_rejected(self):
+    def test_nan_avg_rejected(self):
         d = base_data()
-        d["books"][0]["bid"][2]["vol"] = "10"
+        d["avg_trade_price_yuan_mwh"][1] = float("nan")
         with pytest.raises(ValidationError):
             validate(d)
 
-    def test_nan_px_rejected(self):
+    def test_inf_avg_rejected(self):
         d = base_data()
-        d["books"][1]["ask"][0]["px"] = float("nan")
-        with pytest.raises(ValidationError):
-            validate(d)
-
-    def test_inf_vol_rejected(self):
-        d = base_data()
-        d["books"][1]["bid"][0]["vol"] = float("inf")
+        d["avg_trade_price_yuan_mwh"][1] = float("inf")
         with pytest.raises(ValidationError):
             validate(d)
 
@@ -150,13 +137,10 @@ class TestValidateFinite:
 
 
 class TestValidateStructure:
-    def test_degenerate_zero_vol_levels_ok(self):
-        # 档位量为 0 合法（无深度档位）
+    def test_avg_zero_price_ok(self):
+        # 平均成交价为 0（限价下界）合法
         d = base_data()
-        d["books"][3] = {
-            "bid": [{"px": 398.0 - i, "vol": 0.0} for i in range(5)],
-            "ask": [{"px": 402.0 + i, "vol": 0.0} for i in range(5)],
-        }
+        d["avg_trade_price_yuan_mwh"][3] = 0.0
         validate(d)
 
     def test_tiny_lot_ok(self):
@@ -183,15 +167,15 @@ class TestValidateStructure:
         with pytest.raises(ValidationError):
             validate(d, 0.0, 9999.0)
 
-    def test_book_px_out_of_range_rejected(self):
+    def test_avg_price_out_of_range_rejected(self):
         d = base_data()
-        d["books"][0]["ask"][0]["px"] = 50000.0
+        d["avg_trade_price_yuan_mwh"][0] = 50000.0
         with pytest.raises(ValidationError):
             validate(d, 0.0, 9999.0)
 
-    def test_book_px_negative_rejected(self):
+    def test_avg_price_negative_rejected(self):
         d = base_data()
-        d["books"][0]["bid"][0]["px"] = -1.0
+        d["avg_trade_price_yuan_mwh"][0] = -1.0
         with pytest.raises(ValidationError):
             validate(d, 0.0, 9999.0)
 
@@ -213,17 +197,15 @@ class TestValidateStructure:
         with pytest.raises(ValidationError):
             validate(d)
 
-    def test_book_px_at_boundaries_ok(self):
+    def test_avg_price_at_boundaries_ok(self):
         d = base_data()
-        d["books"][0] = {
-            "bid": [{"px": 9994.0 - i, "vol": 10} for i in range(5)],
-            "ask": [{"px": 9995.0 + i, "vol": 10} for i in range(5)],
-        }
+        d["avg_trade_price_yuan_mwh"][0] = 0.0
+        d["avg_trade_price_yuan_mwh"][1] = 9999.0
         validate(d, 0.0, 9999.0)
 
 
 class TestSplitPriceLimits:
-    """盘口/合同限价与现货预测限价分离（中长期 20% 上浮 vs 现货 [-50, 800]）。"""
+    """平均成交价/合同限价与现货预测限价分离（中长期 20% 上浮 vs 现货 [-50, 800]）。"""
 
     def test_spot_above_midterm_cap_ok_with_spot_cap(self):
         # 现货预测 600 元/MWh 超中长期上限 481.44，但现货上限 800 → 通过
@@ -256,10 +238,10 @@ class TestSplitPriceLimits:
         d["spot_forecast_yuan_mwh"][1] = 800.0
         validate(d, 0.0, 481.44, spot_price_min=-50.0, spot_price_max=800.0)
 
-    def test_book_above_midterm_cap_rejected(self):
-        # 盘口价 600 超中长期上限 → 拒绝
+    def test_avg_above_midterm_cap_rejected(self):
+        # 平均成交价 600 超中长期上限 → 拒绝
         d = base_data()
-        d["books"][0]["ask"][0]["px"] = 600.0
+        d["avg_trade_price_yuan_mwh"][0] = 600.0
         with pytest.raises(ValidationError):
             validate(d, 0.0, 481.44, spot_price_min=-50.0, spot_price_max=800.0)
 
@@ -277,7 +259,7 @@ class TestSplitPriceLimits:
             validate(d, 0.0, 481.44)
 
     def test_run_uses_spot_bounds_from_config(self, tmp_path):
-        # run 按 config 拆分校验：现货可负、可超 481.44（≤800），盘口不可
+        # run 按 config 拆分校验：现货可负、可超 481.44（≤800），平均成交价不可
         d = base_data()
         d["spot_forecast_yuan_mwh"][0] = -30.0
         result = run(full_config(price_max_yuan_mwh=481.44,
@@ -293,7 +275,7 @@ class TestSplitPriceLimits:
                             spot_price_max_yuan_mwh=800.0), d2)
 
         d3 = base_data()
-        d3["books"][0]["ask"][0]["px"] = 600.0
+        d3["avg_trade_price_yuan_mwh"][0] = 600.0
         with pytest.raises(ValidationError):
             run(full_config(price_max_yuan_mwh=481.44,
                             spot_price_min_yuan_mwh=-50.0,
@@ -374,10 +356,8 @@ class TestNegativeSpot:
 
     def test_decide_period_negative_spot(self):
         from src.decision import decide_period
-        b = {"bid": [{"px": 380.0 - i, "vol": 100} for i in range(5)],
-             "ask": [{"px": 384.0 + i, "vol": 100} for i in range(5)]}
-        # 带内 mv0 = S = -30 → 买不可能（-32 > 384 假），卖可能（380-2 > -30 真）
-        d = decide_period(b, 1000, 1000, -30.0, 400, 5000, 10, 2.0)
+        # 带内 mv0 = S = -30 → 买不可能（-32 > 382 假），卖可能（382-2 > -30 真）
+        d = decide_period(382.0, 1000, 1000, -30.0, 400, 5000, 10, 2.0)
         assert d.action == "sell"
         assert d.mv == -30.0
         assert d.expected_pnl_cny > 0
@@ -393,18 +373,11 @@ class TestNegativeSpot:
             if x["action"] != "hold":
                 assert x["price_range"][0] <= x["price_range"][1]
 
-    def test_run_mixed_negative_spot_with_books(self, tmp_path):
-        # 负现货 + 盘口价也低（贴近下限）→ 全链路无异常
+    def test_run_mixed_negative_spot_with_avg(self, tmp_path):
+        # 负现货 + 平均成交价贴近下限 → 全链路无异常
         d = base_data()
         d["spot_forecast_yuan_mwh"] = [round(-50 + 8 * (t % 24), 1) for t in range(24)]
-        for t in range(24):
-            b = d["books"][t]
-            lo = min(lvl["px"] for lvl in b["bid"])
-            # 保持 bid<ask 结构与价格下限，仅下移
-            d["books"][t] = {
-                "bid": [{"px": round(lvl["px"] - lo + 20.0, 1), "vol": lvl["vol"]} for lvl in b["bid"]],
-                "ask": [{"px": round(lvl["px"] - lo + 22.0, 1), "vol": lvl["vol"]} for lvl in b["ask"]],
-            }
+        d["avg_trade_price_yuan_mwh"] = [round(20.0 + (t % 24), 1) for t in range(24)]
         result = run(cfg, d)
         assert len(result["decisions"]) == 24
 
@@ -470,44 +443,40 @@ class TestNumericStability:
 
 class TestDecisionEdge:
     def test_buy_with_zero_room_hold(self):
-        # 持仓已超目标位 → 无买入余量 → hold
-        d = _period(valid_book(bid1=380.0, ask1=384.0), Q_c=2000, L=1000, S=500, P_avg=400)
+        # 持仓已超目标位 → 无买入余量 → hold（方向信号仍保留）
+        d = _period(380.0, Q_c=2000, L=1000, S=500, P_avg=400)
         assert d.action == "hold"
 
-    def test_huge_depth_ok(self):
-        # 深度极大（1e9）不溢出
-        b = valid_book(vol=1e9)
-        d = _period(b, Q_c=800, L=1000)
+    def test_huge_room_ok(self):
+        # 带内余量极大时按限额封顶，不溢出
+        d = _period(405.0, Q_c=800, L=1000)
         assert d.action == "buy"
         assert 0 < d.volume_mwh <= 200
 
-    def test_zero_levels_ok(self):
-        # 全部档位量为 0 → 量 0 → hold（不崩）
-        b = valid_book(vol=0.0)
-        d = _period(b, Q_c=800, L=1000)
-        assert d.action == "hold"
+    def test_avg_zero_price_buy(self):
+        # 平均成交价为 0（限价下界）→ 买触发，区间围绕 0 对称，不崩
+        d = _period(0.0, Q_c=800, L=1000)
+        assert d.action == "buy"
+        assert d.volume_mwh > 0
 
     def test_theta_zero_buy(self):
-        # θ=0：只要 mv0 > ask1 就买
-        b = valid_book(bid1=380.0, ask1=381.0)
-        d = _period(b, Q_c=800, L=1000, theta=0.0)
+        # θ=0：只要 mv0 > A 就买
+        d = _period(381.0, Q_c=800, L=1000, theta=0.0)
         assert d.action == "buy"
 
     def test_theta_huge_hold(self):
-        d = _period(valid_book(bid1=380.0, ask1=381.0), Q_c=800, L=1000, theta=1e9)
+        d = _period(381.0, Q_c=800, L=1000, theta=1e9)
         assert d.action == "hold"
 
-    def test_negative_theta_buy(self):
-        # θ 为负（激进）不崩；超配持仓下 bid1−θ > mv0 → 卖方向
-        b = valid_book(bid1=415.0, ask1=416.0)
-        d = _period(b, Q_c=1200, L=1000, S=500, theta=-5.0)
+    def test_negative_theta_sell(self):
+        # θ 为负（激进）不崩；超配持仓下 A−θ > mv0 → 卖方向
+        d = _period(415.5, Q_c=1200, L=1000, S=500, theta=-5.0)
         assert d.action == "sell"
         assert d.volume_mwh > 0
 
     def test_fractional_min_lot(self):
         from src.decision import decide_period
-        b = valid_book(bid1=380.0, ask1=381.0)
-        d = decide_period(b, 800, 1000, 300, 400, 5000, 2.5, 2.0)
+        d = decide_period(381.0, 800, 1000, 300, 400, 5000, 2.5, 2.0)
         # 取整到 2.5 的倍数
         assert d.volume_mwh % 2.5 == 0
 
@@ -676,10 +645,7 @@ class TestFuzz:
                 elif kind == 1:
                     d["load_forecast_mwh"][t] = rng.uniform(-1000, 20000)
                 else:
-                    d["books"][t] = {
-                        "bid": [{"px": 398.0 - i, "vol": rng.uniform(0, 1e6)} for i in range(5)],
-                        "ask": [{"px": 402.0 + i, "vol": rng.uniform(0, 1e6)} for i in range(5)],
-                    }
+                    d["avg_trade_price_yuan_mwh"][t] = rng.uniform(-1000, 1e6)
             try:
                 validate(d)
             except ValidationError:

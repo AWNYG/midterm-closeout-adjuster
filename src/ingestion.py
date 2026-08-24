@@ -1,4 +1,4 @@
-"""数据接入与校验：读当日输入 JSON，24 点对齐、盘口规范、价格/量合法性。"""
+"""数据接入与校验：读当日输入 JSON，24 点对齐、平均成交价、价格/量合法性。"""
 
 import json
 import math
@@ -22,43 +22,19 @@ def _finite_number(x, name: str, *, allow_negative: bool = True) -> None:
         raise ValidationError(f"{name}={x} 不能为负")
 
 
-def fetch_books() -> list | None:
-    """爬虫对接占位：返回 24 个盘口 JSON；爬虫未就绪返回 None 走本地输入。"""
-    return None
-
-
-def _check_levels(levels: list, descending: bool, name: str,
-                  price_min: float, price_max: float):
-    if not isinstance(levels, list) or len(levels) != 5:
-        raise ValidationError(f"{name}: 必须恰为 5 档")
-    prev = None
-    for lvl in levels:
-        if not isinstance(lvl, dict) or "px" not in lvl or "vol" not in lvl:
-            raise ValidationError(f"{name}: 档位缺 px/vol 字段")
-        _finite_number(lvl["vol"], f"{name} 档位量", allow_negative=False)
-        _finite_number(lvl["px"], f"{name} 档位价", allow_negative=True)
-        if not (price_min <= lvl["px"] <= price_max):
-            raise ValidationError(f"{name} 档位价={lvl['px']} 越界 [{price_min}, {price_max}]")
-        if prev is not None:
-            bad = (lvl["px"] >= prev) if descending else (lvl["px"] <= prev)
-            if bad:
-                raise ValidationError(f"{name}: 价格顺序错误（{'应递减' if descending else '应递增'}）")
-        prev = lvl["px"]
-
-
 def validate(data, price_min: float = 0.0, price_max: float = 9999.0,
              spot_price_min: float | None = None,
              spot_price_max: float | None = None) -> None:
     """校验输入结构，失败抛 ValidationError。
 
-    price_min/price_max 约束盘口价格与合同成交均价（中长期限价）；
+    price_min/price_max 约束平均成交价与合同成交均价（中长期限价）；
     spot_price_min/spot_price_max 单独约束现货价预测（现货价格不受中长期
     上浮限制、可负），缺省取 price_min/price_max。
     """
     if not isinstance(data, dict):
         raise ValidationError(f"输入顶层必须是 JSON 对象，收到 {type(data).__name__}")
     for key in ("as_of", "delivery_date", "spot_forecast_yuan_mwh", "load_forecast_mwh",
-                "contract", "books", "position_limit_mwh", "min_lot_mwh"):
+                "contract", "avg_trade_price_yuan_mwh", "position_limit_mwh", "min_lot_mwh"):
         if key not in data:
             raise ValidationError(f"缺少字段: {key}")
     if not isinstance(data["as_of"], str):
@@ -96,17 +72,13 @@ def validate(data, price_min: float = 0.0, price_max: float = 9999.0,
         if c["period"] != t:
             raise ValidationError(f"contract[{t}].period={c['period']} 与列表位置不一致（须按时段 0~23 升序）")
 
-    if len(data["books"]) != 24:
-        raise ValidationError("books 必须为 24 个时段盘口")
-    for t, b in enumerate(data["books"]):
-        if not isinstance(b, dict) or "bid" not in b or "ask" not in b:
-            raise ValidationError(f"books[{t}] 缺 bid/ask")
-        _check_levels(b["bid"], descending=True, name=f"books[{t}].bid",
-                      price_min=price_min, price_max=price_max)
-        _check_levels(b["ask"], descending=False, name=f"books[{t}].ask",
-                      price_min=price_min, price_max=price_max)
-        if b["bid"][0]["px"] >= b["ask"][0]["px"]:
-            raise ValidationError(f"books[{t}]: bid1 应低于 ask1")
+    avg = data["avg_trade_price_yuan_mwh"]
+    if len(avg) != 24:
+        raise ValidationError("avg_trade_price_yuan_mwh 必须为 24 个时段")
+    for t, a in enumerate(avg):
+        _finite_number(a, f"avg_trade_price[{t}]", allow_negative=True)
+        if not (price_min <= a <= price_max):
+            raise ValidationError(f"avg_trade_price[{t}]={a} 越界 [{price_min}, {price_max}]")
 
     _finite_number(data["position_limit_mwh"], "position_limit_mwh", allow_negative=False)
     if data["position_limit_mwh"] <= 0:
